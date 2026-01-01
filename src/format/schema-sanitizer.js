@@ -540,6 +540,11 @@ export function sanitizeSchema(schema) {
             }
         } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
             sanitized[key] = sanitizeSchema(value);
+        } else if (key === 'type' && Array.isArray(value)) {
+            // Flatten type arrays for Google API compatibility
+            // e.g., ["string", "null"] -> "string"
+            const nonNullTypes = value.filter(t => t !== 'null' && t);
+            sanitized.type = nonNullTypes.length > 0 ? nonNullTypes[0] : 'string';
         } else {
             sanitized[key] = value;
         }
