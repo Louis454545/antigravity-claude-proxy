@@ -7,7 +7,6 @@
 import { execSync } from 'child_process';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
-import { createRequire } from 'module';
 import { logger } from './logger.js';
 
 /**
@@ -121,30 +120,36 @@ export function attemptAutoRebuild(error) {
 }
 
 /**
- * Clear the require cache for a module to force re-import
- * This is needed after rebuilding a native module
- * @param {string} moduleName - The module name (e.g., 'better-sqlite3')
+ * Recursively clear a module and its dependencies from the require cache
+ * This is needed after rebuilding a native module to force re-import
+ * @param {string} modulePath - Resolved path to the module
+ * @param {object} cache - The require.cache object
+ * @param {Set} [visited] - Set of already-visited paths to prevent cycles
  */
-export function clearModuleCache(moduleName) {
-    const require = createRequire(import.meta.url);
-    try {
-        const resolved = require.resolve(moduleName);
-        // Clear the main module and its dependencies
-        const mod = require.cache[resolved];
-        if (mod) {
-            // Remove from parent's children array
-            if (mod.parent) {
-                const idx = mod.parent.children.indexOf(mod);
-                if (idx !== -1) {
-                    mod.parent.children.splice(idx, 1);
-                }
-            }
-            // Delete from cache
-            delete require.cache[resolved];
+export function clearRequireCache(modulePath, cache, visited = new Set()) {
+    if (visited.has(modulePath)) return;
+    visited.add(modulePath);
+
+    const mod = cache[modulePath];
+    if (!mod) return;
+
+    // Recursively clear children first
+    if (mod.children) {
+        for (const child of mod.children) {
+            clearRequireCache(child.id, cache, visited);
         }
-    } catch {
-        // Module might not be in cache, that's okay
     }
+
+    // Remove from parent's children array
+    if (mod.parent && mod.parent.children) {
+        const idx = mod.parent.children.indexOf(mod);
+        if (idx !== -1) {
+            mod.parent.children.splice(idx, 1);
+        }
+    }
+
+    // Delete from cache
+    delete cache[modulePath];
 }
 
 export default {
@@ -153,5 +158,5 @@ export default {
     findPackageRoot,
     rebuildModule,
     attemptAutoRebuild,
-    clearModuleCache
+    clearRequireCache
 };
